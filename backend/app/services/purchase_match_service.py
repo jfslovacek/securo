@@ -144,32 +144,44 @@ async def match_purchases(
         alive_linked = set(result.scalars().all())
     used_txn_ids: set[uuid.UUID] = set(alive_linked)
 
-    # Bucket by (account, amount) for the exact tier; keep a per-account list
-    # sorted by date for the suggestion tier scan.
+    # Bucket by (account, amount) for the exact tier and index candidates by
+    # (account, date) for the suggestion scan. A real export yields ~1,500
+    # charges and a card account thousands of debits; scanning every candidate
+    # per charge is quadratic, while six date-key lookups per charge are not.
     exact_buckets: dict[tuple, list[Transaction]] = {}
-    by_account: dict[uuid.UUID, list[Transaction]] = {}
+    by_account_date: dict[tuple, list[Transaction]] = {}
     for txn in candidates:
         if txn.id in used_txn_ids or not _has_amazon_descriptor(txn.description):
             continue
         exact_buckets.setdefault((txn.account_id, txn.amount), []).append(txn)
-        by_account.setdefault(txn.account_id, []).append(txn)
+        by_account_date.setdefault((txn.account_id, txn.date), []).append(txn)
 
     def window_candidates(charge: AmazonCharge):
-        """Amazon-text debits inside the ship-date window, cheapest filter first."""
-        end = charge.ship_date + timedelta(days=MATCH_WINDOW_DAYS)
+        """Amazon-text debits inside the ship-date window, earliest date first.
+
+        The (account, date) index already orders the scan by date, so the
+        first hit is also the earliest posting — the pairing heuristic picks
+        the charge's own payment before a later twin's can be stolen.
+        """
+        dates = [charge.ship_date + timedelta(days=d) for d in range(MATCH_WINDOW_DAYS + 1)]
         if charge.card_last4:
             scoped = [a for a in accounts if a.masked_number == charge.card_last4] or accounts
         else:
             scoped = accounts
         for account in scoped:
-            for txn in by_account.get(account.id, ()):
-                if txn.id in used_txn_ids:
-                    continue
-                if not (charge.ship_date <= txn.date <= end):
-                    continue
-                yield txn
+            for day in dates:
+                for txn in by_account_date.get((account.id, day), ()):
+                    if txn.id in used_txn_ids:
+                        continue
+                    yield txn
 
     # ── Match ────────────────────────────────────────────────────────────
+    # Ship-date order, not file order: real exports repeat amounts ($10.81
+    # appears 27 times), and a charge's own payment posts no later than a
+    # later twin's. Processing earlier shipments first lets each one take its
+    # own transaction before a later charge can scan past it — file order
+    # could match the twins to each other's payments.
+    charges = sorted(charges, key=lambda c: c.ship_date)
     matched_pairs: list[tuple[AmazonCharge, Transaction]] = []
 
     for charge in charges:
@@ -180,21 +192,25 @@ async def match_purchases(
             continue
 
         hit = None
-        for account in (accounts if not charge.card_last4 else
-                        [a for a in accounts if a.masked_number == charge.card_last4] or accounts):
-            for delta in (Decimal("0"), Decimal("0.01"), Decimal("-0.01")):
-                for txn in exact_buckets.get((account.id, charge.amount + delta), ()):
-                    if txn.id in used_txn_ids:
-                        continue
-                    if not (charge.ship_date <= txn.date
-                            and txn.date <= charge.ship_date + timedelta(days=MATCH_WINDOW_DAYS)):
-                        continue
-                    # Earliest posting date wins; uuid is not orderable, so
-                    # same-date ties keep scan order (stable per run).
-                    if hit is None or txn.date < hit.date:
-                        hit = txn
-            if hit is not None:
-                break
+        # Split payments never auto-link: the card saw LESS than the export
+        # total (gift-card part unknown), so an exact-amount hit inside the
+        # window is more likely another purchase's payment than this charge's.
+        if not charge.is_split_payment:
+            for account in (accounts if not charge.card_last4 else
+                            [a for a in accounts if a.masked_number == charge.card_last4] or accounts):
+                for delta in (Decimal("0"), Decimal("0.01"), Decimal("-0.01")):
+                    for txn in exact_buckets.get((account.id, charge.amount + delta), ()):
+                        if txn.id in used_txn_ids:
+                            continue
+                        if not (charge.ship_date <= txn.date
+                                and txn.date <= charge.ship_date + timedelta(days=MATCH_WINDOW_DAYS)):
+                            continue
+                        # Earliest posting date wins; uuid is not orderable, so
+                        # same-date ties keep scan order (stable per run).
+                        if hit is None or txn.date < hit.date:
+                            hit = txn
+                if hit is not None:
+                    break
 
         if hit is not None:
             used_txn_ids.add(hit.id)

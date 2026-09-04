@@ -190,3 +190,52 @@ async def test_empty_export_reports_zero(session, test_user, test_workspace):
         session, test_workspace.id, [], apply=True,
     )
     assert report.charges_parsed == 0
+
+
+@pytest.mark.asyncio
+async def test_same_amount_charges_pair_with_their_own_charge(session, test_user, test_workspace):
+    """$25.00 appears many times in a real export; charges must take their own
+    payment, not any same-amount debit. Ship-date order + earliest-posting
+    pick makes the correct pairing deterministic."""
+    acct = await _card(session, test_user, test_workspace)
+    # Both debits fall inside both charges' match windows (ships May 8 / May
+    # 10, window 5 days): processed in ship-date order, A takes the earlier
+    # posting and B keeps its own; processed in file order, B would take A's.
+    ta = await _txn(session, test_user, test_workspace, acct, "AMZN Mktp US", "25.00", 11)
+    tb = await _txn(session, test_user, test_workspace, acct, "AMZN Mktp US", "25.00", 12)
+
+    charges = [
+        _charge("25.00", 10, order_id="111-2", tracking="TBA-B"),  # file order: B first
+        _charge("25.00", 8, order_id="111-1", tracking="TBA-A"),
+    ]
+    report = await purchase_match_service.match_purchases(
+        session, test_workspace.id, charges, apply=True,
+    )
+
+    assert report.auto_matched == 2
+    by_order = {p.order_id: p for p in (await session.execute(select(AmazonPurchase))).scalars()}
+    assert by_order["111-1"].transaction_id == ta.id
+    assert by_order["111-2"].transaction_id == tb.id
+
+
+@pytest.mark.asyncio
+async def test_split_payment_cannot_steal_another_purchases_charge(session, test_user, test_workspace):
+    """A gift-card split charges the card LESS than the export total. If some
+    other purchase happens to cost exactly that, exact-amount matching would
+    link them both — so split charges never auto-link."""
+    acct = await _card(session, test_user, test_workspace)
+    # The real $21.00 debit is the second purchase's payment, not the split's.
+    txn = await _txn(session, test_user, test_workspace, acct, "AMZN Mktp US", "21.00", 10)
+
+    charges = [
+        _charge("25.00", 8, order_id="111-S", tracking="TBA-S", split=True),
+        _charge("21.00", 9, order_id="111-T", tracking="TBA-T"),
+    ]
+    report = await purchase_match_service.match_purchases(
+        session, test_workspace.id, charges, apply=True,
+    )
+
+    assert report.auto_matched == 1 and report.suggestions == 1
+    by_order = {p.order_id: p for p in (await session.execute(select(AmazonPurchase))).scalars()}
+    assert by_order["111-S"].transaction_id is None  # suggested, never linked
+    assert by_order["111-T"].transaction_id == txn.id  # its own payment kept

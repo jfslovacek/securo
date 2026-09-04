@@ -1,6 +1,6 @@
 # Amazon Order History import & purchase→transaction matching
 
-Status: draft (PR candidate) · Scope: backend only
+Status: draft (PR candidate) · Scope: backend + import UI draft
 
 ## Problem
 
@@ -24,9 +24,13 @@ match on `notes`) and to agent context, without double-counting spend.
 
 The export is **one row per shipment item**, not one row per order or per charge:
 
-- 2,132 rows → 1,398 distinct `Order ID`s → ~1,579 (order, tracking) groups.
+- 2,132 rows → 1,398 distinct `Order ID`s → ~1,579 (order, tracking) groups →
+  **1,536 charge candidates** after the parser drops zero-amount and no-card
+  rows.
 - A single order split into 4 shipments appears as 4+ rows with **different**
-  `Carrier Name & Tracking Number` (TBA…) values — each was a separate card charge.
+  `Carrier Name & Tracking Number` (TBA…) values — each was a separate card
+  charge. And 89 tracking strings are reused across *different* orders, so
+  the grouping key must carry the order id too.
 - `Total Amount` is **per row (item)**, including item tax and any shipping charged.
   The card charge for a shipment is the sum of `Total Amount` over the rows sharing
   one tracking number. (`Shipment Item Subtotal` is repeated per shipment and would
@@ -34,8 +38,12 @@ The export is **one row per shipment item**, not one row per order or per charge
 - `Payment Method Type` carries brand + card last-4: `Visa - 9371`, and split
   payments like `Gift Certificate/Card and Visa - 7944` (gift card covered part of
   the cost, so **the card charge is lower than the row total** — ~2% of rows here).
-- `Ship Date`/`Order Date` are ISO timestamps (`2022-05-26T02:17:15Z`). Amazon
-  charges when a shipment leaves the warehouse, so charge date ≈ ship date.
+- `Ship Date`/`Order Date` arrive as ISO timestamps, sometimes with milliseconds
+  (`2026-05-05T10:54:00.704Z`), sometimes as `Not Available`. Amazon charges when
+  a shipment leaves the warehouse, so charge date ≈ ship date.
+- A few rows carry **two** tracking numbers ("Shipped and Shipped"): the item
+  shipped in two parcels, so its `Total Amount` may not equal any single card
+  charge — flagged report-only like split payments.
 - Some rows have `Not Available` tracking (42 here) or no card at all (gift-card-
   only purchases — those never hit a card statement and are dropped).
 
@@ -72,10 +80,30 @@ tier reported only):
   linking on coincidental amounts.
 - **Tier A (auto-link)**: `|txn.amount − charge.amount| ≤ $0.01`. One-to-one: a
   transaction links to at most one purchase (already-linked transactions are
-  excluded, mirroring recurring-bill matching).
-- **Tier B (suggestions, report-only)**: split-payment or tolerance matches —
-  amount in `[50 %, 100 %)` of the charge → returned as `suggestions` for manual
+  excluded, mirroring recurring-bill matching). Split payments and compound-
+  tracking charges skip this tier entirely: their export total is not a
+  trustworthy charge amount, and an exact-amount debit inside the window is
+  more plausibly some other purchase's payment.
+- **Ordering**: charges are matched in ship-date order, not file order, and
+  each tier picks the earliest unused posting date. Real exports repeat
+  amounts heavily (769 of 1,536 charges share an amount with another charge;
+  $10.81 appears 27 times), so file-order matching could pair a charge with
+  the later twin's payment.
+
+- **Tier B (suggestions, report-only)**: anything else in `[50 %, 100 %)` of
+  the charge amount inside the window — split payments, compound-tracking
+  rows, tolerance near-misses → returned as `suggestions` for manual
   confirmation, never auto-linked.
+
+## Calibration (against a real 2,132-row export)
+
+`backend/scripts/calibrate_amazon_match.py <export.csv>` rebuilds a "perfect
+statement" from the export (one synthetic debit per charge, posted ship+1;
+split payments seeded 20 % low) and runs the real matcher against it. On the
+2,132-row export: **1,536 charges parsed → 1,478 auto-linked (every non-split
+charge), 0 mispaired links, 58 report-only suggestions**, re-import fully
+skipped, whole match under 0.15 s. The 28 same-amount pairs whose windows
+overlap are paired correctly via ship-date order + earliest-posting pick.
 
 ### Enrich & persist (apply step)
 
@@ -91,7 +119,11 @@ tier reported only):
 - Importing unmatched purchases as *new* transactions (double-count risk until
   pending-charge placeholders exist).
 - Auto-applying Tier B suggestions; rule re-evaluation after enrichment; MCP tool
-  `list_amazon_purchases`; frontend import UI (this PR is spec + backend + tests).
+  `list_amazon_purchases`.
+- Import UI: a third "Purchases" tab on the import page (`amazon-import-panel.tsx`)
+  is drafted in this PR — drop zone, dry-run preview with per-pair counts, card
+  selector, and apply. It has no component tests yet and reuses the statement
+  importer's look deliberately.
 - Non-US exports and digital-goods rows (no tracking, no card) — dropped by the
   same last-4 rule.
 

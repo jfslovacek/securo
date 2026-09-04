@@ -4,6 +4,7 @@ The fixture is scrubbed (names/addresses replaced) but structurally real:
 multi-shipment orders, a gift-card split payment, per-row totals that must be
 summed per shipment — the exact traps the export sets for a naive reader.
 """
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -81,3 +82,34 @@ def test_non_card_and_zero_rows_are_dropped():
 def test_missing_columns_raise_a_clear_error():
     with pytest.raises(ValueError, match="Not an Amazon Order History export"):
         parse_order_history(b"a,b,c\n1,2,3\n")
+
+
+def test_real_world_ship_date_formats():
+    # Real exports mix full timestamps, millisecond timestamps and
+    # "Not Available"; the last two must anchor on the order date.
+    header = (
+        "Order ID,Total Amount,Product Name,Ship Date,Payment Method Type,"
+        "Currency,Carrier Name & Tracking Number,Order Date"
+    )
+    rows = [
+        "111-1,10.00,Thing,2026-05-05T10:54:00.704Z,Visa - 9371,USD,TBA1,2026-05-04T00:00:00Z",
+        "111-2,10.00,Thing,Not Available,Visa - 9371,USD,TBA2,2026-05-06T00:00:00Z",
+    ]
+    charges = parse_order_history(("\r\n".join([header, *rows]) + "\r\n").encode())
+    assert [c.ship_date for c in charges] == [date(2026, 5, 5), date(2026, 5, 6)]
+
+
+def test_compound_tracking_never_auto_matches():
+    # "Shipped and Shipped" rows name two tracking numbers: the row total may
+    # span two separately-charged shipments, so it must be report-only.
+    header = (
+        "Order ID,Total Amount,Product Name,Ship Date,Payment Method Type,"
+        "Currency,Carrier Name & Tracking Number,Order Date"
+    )
+    row = (
+        "111-1,40.00,Thing,2026-05-05T10:54:00Z,Visa - 9371,USD,"
+        "AMZN_US(TBA123) and AMZN_US(TBA456),2026-05-04T00:00:00Z"
+    )
+    charges = parse_order_history(("\r\n".join([header, row]) + "\r\n").encode())
+    assert len(charges) == 1
+    assert charges[0].is_split_payment

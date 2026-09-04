@@ -91,10 +91,14 @@ def parse_order_history(content: bytes) -> list[AmazonCharge]:
             + ", ".join(missing) + ")"
         )
 
-    # Charge identity = (Order ID, tracking). Tracking is the shipment key; when
-    # it is absent we fall back to Ship Date so same-day items of one order
-    # merge (documented risk: two same-day shipments of one order would merge
-    # too, which is rare and errs toward under-matching, never a wrong link).
+    # Charge identity = (Order ID, tracking, ship date). Tracking is the
+    # shipment key — and 89 of them are reused across *different* orders in a
+    # real export, so order_id must stay in the key. Without tracking, rows
+    # group per ship date instead (documented risk: two same-day untracked
+    # shipments of one order would merge, which errs toward under-matching,
+    # never a wrong link). Dates arrive as full ISO timestamps or as
+    # "Not Available"; both anchor on the ship date when parseable, else the
+    # order date.
     charges: dict[tuple, AmazonCharge] = {}
 
     for row in reader:
@@ -124,6 +128,11 @@ def parse_order_history(content: bytes) -> list[AmazonCharge]:
         tracking = row.get("carrier name & tracking number", "").strip()
         if tracking in ("Not Available", "Not Applicable"):
             tracking = ""
+        # "AMZN_US(TBA…63204) and AMZN_US(TBA…832804)" — one item split across
+        # two shipments (status "Shipped and Shipped"), which Amazon may have
+        # charged as one combined charge or two. Which one it was is unknowable
+        # from the export, so flag it like a split payment: report-only.
+        compound = " and " in tracking
 
         key = (order_id, tracking, ship_date)
         charge = charges.get(key)
@@ -136,7 +145,7 @@ def parse_order_history(content: bytes) -> list[AmazonCharge]:
                 amount=Decimal("0"),
                 currency=(row.get("currency", "").strip().upper() or "USD"),
                 card_last4=last4,
-                is_split_payment=is_split,
+                is_split_payment=is_split or compound,
                 items=[],
             )
             charges[key] = charge
