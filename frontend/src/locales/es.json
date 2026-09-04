@@ -1081,7 +1081,8 @@
     "page": "Página {{current}} de {{total}}",
     "mapPayee": "Columna de beneficiario",
     "mapExternalId": "Columna de ID de transacción",
-    "mapNotes": "Columna de notas"
+    "mapNotes": "Columna de notas",
+    "tabPurchases": "Compras"
   },
   "assetImport": {
     "title": "Importar órdenes de inversión",
@@ -1962,6 +1963,31 @@
         "claude": "Claude Desktop / Code / Cursor",
         "openai": "OpenAI Responses API"
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Importar compras de Amazon",
+    "chooseHint": "El CSV «Order History» de tu solicitud de datos de Amazon. Las compras se emparejan con los cargos de tarjeta que las pagaron.",
+    "reading": "Leyendo el archivo…",
+    "previewError": "No se pudo leer el archivo",
+    "importError": "No se pudieron importar las compras",
+    "imported": "{{count}} compras guardadas, {{linked}} enlazadas a cargos de tarjeta",
+    "nothingToImport": "No queda nada por importar de este archivo",
+    "summaryCharges": "{{count}} compras leídas",
+    "summaryMatch": "{{linked}} enlazadas, {{suggested}} sugeridas, {{unmatched}} sin emparejar",
+    "summarySkipped": "{{count}} ya importadas",
+    "matchTo": "Emparejar con",
+    "autoDetect": "Todas las cuentas de tarjeta (automático)",
+    "suggestedTitle": "{{count}} coincidencias sugeridas para revisar",
+    "moreRows": "y {{count}} más",
+    "importing": "Importando…",
+    "confirm": "Importar {{count}} compras",
+    "matchOnlyHint": "No se crea nada nuevo: las compras se enlazan a cargos de tarjeta existentes.",
+    "field": {
+      "order": "Pedido",
+      "date": "Enviado",
+      "amount": "Importe",
+      "charge": "Cargo de tarjeta"
     }
   }
 }

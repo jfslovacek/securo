@@ -1161,7 +1161,8 @@
     "page": "Strona {{current}} z {{total}}",
     "mapPayee": "Kolumna odbiorcy",
     "mapExternalId": "Kolumna ID transakcji",
-    "mapNotes": "Kolumna notatek"
+    "mapNotes": "Kolumna notatek",
+    "tabPurchases": "Zakupy"
   },
   "assetImport": {
     "title": "Importuj zlecenia inwestycyjne",
@@ -2063,6 +2064,31 @@
         "claude": "Claude Desktop / Code / Cursor",
         "openai": "OpenAI Responses API"
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Importuj zakupy z Amazon",
+    "chooseHint": "Plik CSV „Order History” z Twojego żądania danych Amazon. Zakupy są dopasowywane do obciążeń na karcie, które je pokryły.",
+    "reading": "Czytanie pliku…",
+    "previewError": "Nie udało się odczytać pliku",
+    "importError": "Nie udało się zaimportować zakupów",
+    "imported": "Zapisano {{count}} zakupów, powiązano {{linked}} z obciążeniami na karcie",
+    "nothingToImport": "Brak zakupów do zaimportowania z tego pliku",
+    "summaryCharges": "Odczytano {{count}} zakupów",
+    "summaryMatch": "{{linked}} powiązanych, {{suggested}} sugerowanych, {{unmatched}} bez dopasowania",
+    "summarySkipped": "{{count}} już zaimportowanych",
+    "matchTo": "Dopasuj do",
+    "autoDetect": "Wszystkie konta kart (automatycznie)",
+    "suggestedTitle": "{{count}} sugerowanych dopasowań do przejrzenia",
+    "moreRows": "i {{count}} więcej",
+    "importing": "Importowanie…",
+    "confirm": "Zaimportuj {{count}} zakupów",
+    "matchOnlyHint": "Nic nowego nie powstaje — zakupy są łączane z istniejącymi obciążeniami na karcie.",
+    "field": {
+      "order": "Zamówienie",
+      "date": "Wysłano",
+      "amount": "Kwota",
+      "charge": "Obciążenie karty"
     }
   }
 }

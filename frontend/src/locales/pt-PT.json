@@ -1081,7 +1081,8 @@
     "balanceImpact": "Impacto no saldo",
     "importedWithExcluded": "{{imported}} importadas, {{skipped}} ignoradas, {{excluded}} excluídas",
     "suggested": "Sugerida",
-    "page": "Página {{current}} de {{total}}"
+    "page": "Página {{current}} de {{total}}",
+    "tabPurchases": "Compras"
   },
   "assetImport": {
     "title": "Importar ordens de investimento",
@@ -1962,6 +1963,31 @@
         "claude": "Claude Desktop / Code / Cursor",
         "openai": "OpenAI Responses API"
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Importar compras da Amazon",
+    "chooseHint": "O ficheiro CSV \"Order History\" do seu pedido de dados da Amazon. As compras são cruzadas com os movimentos do cartão que as pagaram.",
+    "reading": "A ler o ficheiro…",
+    "previewError": "Não foi possível ler este ficheiro",
+    "importError": "Não foi possível importar as compras",
+    "imported": "{{count}} compras guardadas, {{linked}} ligadas a movimentos do cartão",
+    "nothingToImport": "Nada a importar deste ficheiro",
+    "summaryCharges": "{{count}} compras lidas",
+    "summaryMatch": "{{linked}} ligadas, {{suggested}} sugeridas, {{unmatched}} sem correspondência",
+    "summarySkipped": "{{count}} já importadas",
+    "matchTo": "Cruzar com",
+    "autoDetect": "Todas as contas de cartão (automático)",
+    "suggestedTitle": "{{count}} correspondências sugeridas para rever",
+    "moreRows": "e mais {{count}}",
+    "importing": "A importar…",
+    "confirm": "Importar {{count}} compras",
+    "matchOnlyHint": "Não é criado nada de novo — as compras são ligadas aos movimentos existentes do cartão.",
+    "field": {
+      "order": "Encomenda",
+      "date": "Enviado",
+      "amount": "Montante",
+      "charge": "Movimento do cartão"
     }
   }
 }

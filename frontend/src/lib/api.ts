@@ -43,6 +43,7 @@ import type {
   AssetImportPreview,
   AssetImportResult,
   AssetOrderImport,
+  AmazonMatchReport,
   AssetTransaction,
   AssetValue,
   MarketSymbolMatch,
@@ -1312,6 +1313,25 @@ export const importLogs = {
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`/import-logs/${id}`)
+  },
+}
+
+// Amazon "Order History" purchases: matched against existing card charges,
+// never imported as new transactions. Preview is read-only; import persists.
+export const amazon = {
+  previewOrders: async (file: File, accountId?: string): Promise<AmazonMatchReport> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (accountId) formData.append('account_id', accountId)
+    const { data } = await api.post('/amazon/orders/preview', formData)
+    return data
+  },
+  importOrders: async (file: File, accountId?: string): Promise<AmazonMatchReport> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (accountId) formData.append('account_id', accountId)
+    const { data } = await api.post('/amazon/orders', formData)
+    return data
   },
 }
 

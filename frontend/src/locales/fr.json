@@ -1081,7 +1081,8 @@
     "page": "Page {{current}} sur {{total}}",
     "mapPayee": "Colonne du bénéficiaire",
     "mapExternalId": "Colonne d'ID de transaction",
-    "mapNotes": "Colonne des notes"
+    "mapNotes": "Colonne des notes",
+    "tabPurchases": "Achats"
   },
   "assetImport": {
     "title": "Importer des ordres d'investissement",
@@ -1962,6 +1963,31 @@
         "title": "Aucune connexion pour l'instant",
         "subtitle": "Ajoutez une connexion pour pointer Securo vers votre Ollama local, OpenAI, Anthropic, ou tout point de terminaison compatible OpenAI."
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Importer les achats Amazon",
+    "chooseHint": "Le CSV « Order History » de votre demande de données Amazon. Les achats sont rapprochés des dépenses de carte qui les ont payés.",
+    "reading": "Lecture du fichier…",
+    "previewError": "Impossible de lire ce fichier",
+    "importError": "Impossible d'importer les achats",
+    "imported": "{{count}} achats enregistrés, {{linked}} liés à des dépenses de carte",
+    "nothingToImport": "Rien à importer dans ce fichier",
+    "summaryCharges": "{{count}} achats lus",
+    "summaryMatch": "{{linked}} liés, {{suggested}} suggérés, {{unmatched}} sans correspondance",
+    "summarySkipped": "{{count}} déjà importés",
+    "matchTo": "Rapprocher de",
+    "autoDetect": "Tous les comptes de carte (auto)",
+    "suggestedTitle": "{{count}} correspondances suggérées à vérifier",
+    "moreRows": "et {{count}} de plus",
+    "importing": "Import en cours…",
+    "confirm": "Importer {{count}} achats",
+    "matchOnlyHint": "Rien de nouveau n'est créé — les achats sont liés aux dépenses de carte existantes.",
+    "field": {
+      "order": "Commande",
+      "date": "Expédié",
+      "amount": "Montant",
+      "charge": "Dépense de carte"
     }
   }
 }

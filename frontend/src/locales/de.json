@@ -1081,7 +1081,8 @@
     "page": "Seite {{current}} von {{total}}",
     "mapPayee": "Spalte Zahlungsempfänger",
     "mapExternalId": "Spalte Transaktions-ID",
-    "mapNotes": "Spalte Notizen"
+    "mapNotes": "Spalte Notizen",
+    "tabPurchases": "Einkäufe"
   },
   "assetImport": {
     "title": "Wertpapierorders importieren",
@@ -1962,6 +1963,31 @@
         "title": "Noch keine Verbindungen",
         "subtitle": "Füge eine Verbindung hinzu, um Securo auf dein lokales Ollama, OpenAI, Anthropic oder einen OpenAI-kompatiblen Endpunkt zu verweisen."
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Amazon-Käufe importieren",
+    "chooseHint": "Das CSV „Order History“ aus deiner Amazon-Datenanfrage. Die Käufe werden den Kartenbuchungen zugeordnet, die sie bezahlt haben.",
+    "reading": "Datei wird gelesen…",
+    "previewError": "Die Datei konnte nicht gelesen werden",
+    "importError": "Die Käufe konnten nicht importiert werden",
+    "imported": "{{count}} Käufe gespeichert, {{linked}} mit Kartenbuchungen verknüpft",
+    "nothingToImport": "Keine offenen Käufe in dieser Datei",
+    "summaryCharges": "{{count}} Käufe gelesen",
+    "summaryMatch": "{{linked}} verknüpft, {{suggested}} vorgeschlagen, {{unmatched}} ohne Treffer",
+    "summarySkipped": "{{count}} bereits importiert",
+    "matchTo": "Abgleichen mit",
+    "autoDetect": "Alle Kartenkonten (automatisch)",
+    "suggestedTitle": "{{count}} vorgeschlagene Treffer zur Prüfung",
+    "moreRows": "und {{count}} weitere",
+    "importing": "Import läuft…",
+    "confirm": "{{count}} Käufe importieren",
+    "matchOnlyHint": "Es entsteht nichts Neues – Käufe werden mit vorhandenen Kartenbuchungen verknüpft.",
+    "field": {
+      "order": "Bestellung",
+      "date": "Versanddatum",
+      "amount": "Betrag",
+      "charge": "Kartenbuchung"
     }
   }
 }

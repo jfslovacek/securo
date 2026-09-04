@@ -1081,7 +1081,8 @@
     "page": "Página {{current}} de {{total}}",
     "mapPayee": "Coluna da pessoa",
     "mapExternalId": "Coluna de ID da transação",
-    "mapNotes": "Coluna de notas"
+    "mapNotes": "Coluna de notas",
+    "tabPurchases": "Compras"
   },
   "assetImport": {
     "title": "Importar ordens de investimento",
@@ -1962,6 +1963,31 @@
         "claude": "Claude Desktop / Code / Cursor",
         "openai": "OpenAI Responses API"
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Importar compras da Amazon",
+    "chooseHint": "O CSV \"Order History\" do seu pedido de dados da Amazon. As compras são comparadas com os lançamentos do cartão que as pagaram.",
+    "reading": "Lendo o arquivo…",
+    "previewError": "Não foi possível ler esse arquivo",
+    "importError": "Não foi possível importar as compras",
+    "imported": "{{count}} compras salvas, {{linked}} vinculadas a lançamentos do cartão",
+    "nothingToImport": "Nada a importar deste arquivo",
+    "summaryCharges": "{{count}} compras lidas",
+    "summaryMatch": "{{linked}} vinculadas, {{suggested}} sugeridas, {{unmatched}} sem correspondência",
+    "summarySkipped": "{{count}} já importadas",
+    "matchTo": "Comparar com",
+    "autoDetect": "Todas as contas de cartão (automático)",
+    "suggestedTitle": "{{count}} correspondências sugeridas para revisar",
+    "moreRows": "e mais {{count}}",
+    "importing": "Importando…",
+    "confirm": "Importar {{count}} compras",
+    "matchOnlyHint": "Nada novo é criado — as compras são vinculadas aos lançamentos existentes do cartão.",
+    "field": {
+      "order": "Pedido",
+      "date": "Enviado",
+      "amount": "Valor",
+      "charge": "Lançamento do cartão"
     }
   }
 }

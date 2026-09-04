@@ -1081,7 +1081,8 @@
     "page": "Pagina {{current}} van {{total}}",
     "mapPayee": "Kolom begunstigde",
     "mapExternalId": "Kolom Transactie-ID",
-    "mapNotes": "Kolom Opmerkingen"
+    "mapNotes": "Kolom Opmerkingen",
+    "tabPurchases": "Aankopen"
   },
   "assetImport": {
     "title": "Investeringsorders importeren",
@@ -1962,6 +1963,31 @@
         "title": "Nog geen verbindingen",
         "subtitle": "Voeg een verbinding toe om Securo te richten op uw lokale Ollama, OpenAI, Anthropic of een ander OpenAI-compatibel endpoint."
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Amazon-aankopen importeren",
+    "chooseHint": "De 'Order History'-csv uit je Amazon-dataanvraag. Aankopen worden gekoppeld aan de kaartbetalingen die ervoor betaalden.",
+    "reading": "Bestand lezen…",
+    "previewError": "Kan dit bestand niet lezen",
+    "importError": "Kan de aankopen niet importeren",
+    "imported": "{{count}} aankopen opgeslagen, {{linked}} gekoppeld aan kaartbetalingen",
+    "nothingToImport": "Niets meer te importeren uit dit bestand",
+    "summaryCharges": "{{count}} aankopen gelezen",
+    "summaryMatch": "{{linked}} gekoppeld, {{suggested}} gesuggereerd, {{unmatched}} niet gevonden",
+    "summarySkipped": "{{count}} al geïmporteerd",
+    "matchTo": "Vergelijk met",
+    "autoDetect": "Alle rekeningkaarten (automatisch)",
+    "suggestedTitle": "{{count}} gesuggereerde matches om te controleren",
+    "moreRows": "en nog {{count}}",
+    "importing": "Bezig met importeren…",
+    "confirm": "{{count}} aankopen importeren",
+    "matchOnlyHint": "Er ontstaat niets nieuws — aankopen worden gekoppeld aan bestaande kaartbetalingen.",
+    "field": {
+      "order": "Bestelling",
+      "date": "Verzonden",
+      "amount": "Bedrag",
+      "charge": "Kaartbetaling"
     }
   }
 }

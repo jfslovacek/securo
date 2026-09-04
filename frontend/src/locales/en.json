@@ -1080,7 +1080,8 @@
     "page": "Page {{current}} of {{total}}",
     "mapPayee": "Payee column",
     "mapExternalId": "Transaction ID column",
-    "mapNotes": "Notes column"
+    "mapNotes": "Notes column",
+    "tabPurchases": "Purchases"
   },
   "assetImport": {
     "title": "Import investment orders",
@@ -1961,6 +1962,31 @@
         "title": "No connections yet",
         "subtitle": "Add a connection to point Securo at your local Ollama, OpenAI, Anthropic, or any OpenAI-compatible endpoint."
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Import Amazon purchases",
+    "chooseHint": "The \"Order History\" CSV from your Amazon data request. Purchases are matched to the card charges that paid for them.",
+    "reading": "Reading the file…",
+    "previewError": "Could not read that file",
+    "importError": "Could not import the purchases",
+    "imported": "{{count}} purchases stored, {{linked}} linked to card charges",
+    "nothingToImport": "Nothing left to import from this file",
+    "summaryCharges": "{{count}} purchases read",
+    "summaryMatch": "{{linked}} linked, {{suggested}} suggested, {{unmatched}} unmatched",
+    "summarySkipped": "{{count}} already imported",
+    "matchTo": "Match against",
+    "autoDetect": "All card accounts (auto)",
+    "suggestedTitle": "{{count}} suggested matches to review",
+    "moreRows": "and {{count}} more",
+    "importing": "Importing…",
+    "confirm": "Import {{count}} purchases",
+    "matchOnlyHint": "Nothing new is created — purchases are linked to existing card charges.",
+    "field": {
+      "order": "Order",
+      "date": "Shipped",
+      "amount": "Charge",
+      "charge": "Card charge"
     }
   }
 }

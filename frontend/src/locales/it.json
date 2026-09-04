@@ -1081,7 +1081,8 @@
     "page": "Pagina {{current}} di {{total}}",
     "mapPayee": "Colonna del beneficiario",
     "mapExternalId": "Colonna dell'ID transazione",
-    "mapNotes": "Colonna delle note"
+    "mapNotes": "Colonna delle note",
+    "tabPurchases": "Acquisti"
   },
   "assetImport": {
     "title": "Importa ordini di investimento",
@@ -1962,6 +1963,31 @@
         "claude": "Claude Desktop / Code / Cursor",
         "openai": "OpenAI Responses API"
       }
+    }
+  },
+  "amazonImport": {
+    "title": "Importa acquisti Amazon",
+    "chooseHint": "Il CSV «Order History» della tua richiesta dati Amazon. Gli acquisti vengono abbinati alle spese sulla carta che li hanno pagati.",
+    "reading": "Lettura del file…",
+    "previewError": "Impossibile leggere il file",
+    "importError": "Impossibile importare gli acquisti",
+    "imported": "{{count}} acquisti salvati, {{linked}} collegati a spese sulla carta",
+    "nothingToImport": "Niente altro da importare da questo file",
+    "summaryCharges": "{{count}} acquisti letti",
+    "summaryMatch": "{{linked}} collegati, {{suggested}} suggeriti, {{unmatched}} non abbinati",
+    "summarySkipped": "{{count}} già importati",
+    "matchTo": "Confronta con",
+    "autoDetect": "Tutti i conti carta (automatico)",
+    "suggestedTitle": "{{count}} abbinamenti suggeriti da controllare",
+    "moreRows": "e altri {{count}}",
+    "importing": "Importazione…",
+    "confirm": "Importa {{count}} acquisti",
+    "matchOnlyHint": "Non viene creato nulla di nuovo: gli acquisti vengono collegati alle spese esistenti sulla carta.",
+    "field": {
+      "order": "Ordine",
+      "date": "Spedito",
+      "amount": "Importo",
+      "charge": "Spesa carta"
     }
   }
 }

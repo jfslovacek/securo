@@ -818,6 +818,30 @@ export interface AssetImportResult {
   warnings: AssetImportWarning[]
 }
 
+export interface AmazonMatchEntry {
+  order_id: string
+  tracking: string
+  ship_date: string
+  amount: string
+  tier: 'auto' | 'suggest'
+  transaction_id: string | null
+  transaction_description: string | null
+  reason: string | null
+}
+
+/** Dry-run result of matching an Amazon "Order History" export against the
+ *  workspace's card charges (POST /api/amazon/orders/preview). */
+export interface AmazonMatchReport {
+  format: string
+  charges_parsed: number
+  auto_matched: number
+  suggestions: number
+  unmatched: number
+  skipped_existing: number
+  matches: AmazonMatchEntry[]
+  suggested: AmazonMatchEntry[]
+}
+
 export interface AssetTransaction {
   id: string
   asset_id: string

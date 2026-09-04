@@ -13,6 +13,7 @@ import type { ImportPreviewTransaction, ImportReviewTransaction } from '@/types'
 import { Upload, FileText, X, CheckCircle2, AlertCircle, Settings2, Download } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { AssetImportPanel } from '@/components/asset-import-panel'
+import { AmazonImportPanel } from '@/components/amazon-import-panel'
 import { ImportSummaryBar } from '@/components/import-summary-bar'
 import { ImportReviewTable } from '@/components/import-review-table'
 import { ImportHistory } from '@/components/import-history'
@@ -574,26 +575,33 @@ function TransactionImportPanel() {
 export default function ImportPage() {
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') === 'investments' ? 'investments' : 'transactions'
+  const tabParam = searchParams.get('tab')
+  const tab = tabParam === 'investments' || tabParam === 'purchases' ? tabParam : 'transactions'
 
-  function selectTab(next: 'transactions' | 'investments') {
+  function selectTab(next: 'transactions' | 'investments' | 'purchases') {
     const params = new URLSearchParams(searchParams)
     if (next === 'transactions') params.delete('tab')
     else params.set('tab', next)
     setSearchParams(params, { replace: true })
   }
 
+  const TAB_LABEL_KEYS = {
+    transactions: 'import.tabTransactions',
+    investments: 'import.tabInvestments',
+    purchases: 'import.tabPurchases',
+  } as const
+
   return (
     <div className="space-y-6">
       {/* The title follows the tab: "Bank statement" is about the file you
-          are uploading, and an order file is not one. */}
+          are uploading, and an order or purchase file is not one. */}
       <PageHeader
         section={t('import.title')}
-        title={tab === 'investments' ? t('assetImport.title') : t('import.subtitle')}
+        title={tab === 'investments' ? t('assetImport.title') : tab === 'purchases' ? t('amazonImport.title') : t('import.subtitle')}
       />
 
       <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
-        {(['transactions', 'investments'] as const).map((value) => (
+        {(['transactions', 'investments', 'purchases'] as const).map((value) => (
           <button
             key={value}
             type="button"
@@ -602,12 +610,12 @@ export default function ImportPage() {
               tab === value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {t(value === 'transactions' ? 'import.tabTransactions' : 'import.tabInvestments')}
+            {t(TAB_LABEL_KEYS[value])}
           </button>
         ))}
       </div>
 
-      {tab === 'investments' ? <AssetImportPanel /> : <TransactionImportPanel />}
+      {tab === 'investments' ? <AssetImportPanel /> : tab === 'purchases' ? <AmazonImportPanel /> : <TransactionImportPanel />}
     </div>
   )
 }
