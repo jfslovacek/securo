@@ -18,3 +18,6 @@ docker-compose.override.yml
 # downloaded ONNX embedding models, transaction attachments). User data
 # — never commit.
 backend/data/
+
+# Pre-upgrade database dumps — user data, never commit
+backups/
