@@ -74,6 +74,9 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     # Same shape for investment orders: the upload has to be a body, and the
     # dry run only reports what an import would do.
     ("POST", "/api/assets/import/preview"): "parses an upload and returns a preview; writes nothing",
+    # Same shape for Amazon Order History imports: the dry run parses and
+    # matches in memory, so a read-only member previewing a file writes nothing.
+    ("POST", "/api/amazon/orders/preview"): "parses an upload and previews matching; writes nothing",
     # And for a rule being written: the draft has to be a body, and the answer
     # is which existing transactions it would match. Reads rules' own scope.
     ("POST", "/api/rules/preview"): "evaluates an unsaved rule against transactions; writes nothing",
