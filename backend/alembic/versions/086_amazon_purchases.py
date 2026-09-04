@@ -1,7 +1,7 @@
 """store Amazon Order History purchases as matchable charge records
 
-Revision ID: 077
-Revises: 076
+Revision ID: 086
+Revises: 085
 Create Date: 2026-09-03
 
 An Amazon "Order History" export lists what was bought, not what was charged:
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "077"
-down_revision: Union[str, None] = "076"
+revision: str = "086"
+down_revision: Union[str, None] = "085"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
