@@ -3,6 +3,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Uploads (statement/investment/Amazon imports, attachments) proxy through
+    # this server block, and nginx's default cap is 1 MB — small enough that a
+    # real Amazon Order History export (~1.1 MB for 2k orders) died here with
+    # a bare 413 before the backend ever saw it. Keep this comfortably above
+    # the backend's STORAGE_MAX_FILE_SIZE_MB (10) so the app's own limit is
+    # what users actually hit.
+    client_max_body_size 25m;
+
     # API proxy to backend.
     # Resolve the backend hostname at request time via Docker's embedded DNS
     # instead of caching the IP at startup. Without this, Nginx pins the
