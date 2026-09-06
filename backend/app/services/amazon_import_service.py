@@ -51,13 +51,18 @@ _CARD_LAST4_RE = re.compile(r"(\d{4})\s*$")
 
 
 def detect_format(content: bytes) -> bool:
-    """True if the CSV header carries Amazon's Order History columns."""
+    """True if the CSV header carries Amazon's Order History columns.
+
+    Real exports come in two shapes: bare headers and fully quoted ones
+    ("Product Name","Ship Date",...). Splitting on commas alone left the
+    quotes attached and rejected the second shape, so read the line as CSV.
+    """
     first_line = content.split(b"\n", 1)[0]
     try:
         text = first_line.decode("utf-8-sig")
-    except UnicodeDecodeError:
+        cols = {c.strip().lower() for c in next(csv.reader([text]))}
+    except (UnicodeDecodeError, StopIteration, csv.Error):
         return False
-    cols = {c.strip().lower() for c in text.split(",")}
     return all(col in cols for col in REQUIRED_COLUMNS)
 
 

@@ -25,6 +25,27 @@ def test_detect_format_accepts_fixture_and_rejects_plain_statements():
     assert not detect_format(b"date,description,amount\n2026-01-01,COFFEE,4.50\n")
 
 
+def test_detect_format_accepts_quoted_export_headers():
+    # Amazon now quotes every column name in the export header; splitting on
+    # commas alone left the quotes attached and 400'd real uploads.
+    header = (
+        'ASIN,"Billing Address","Carrier Name & Tracking Number",Currency,'
+        'Department,"Gift Message","Gift Recipient Contact","Gift Sender Name",'
+        '"Item Serial Number","Order Date","Order ID","Order Status",'
+        '"Original Quantity","Payment Method Type","Product Condition",'
+        '"Product Name","Purchase Order Number","Ship Date",'
+        '"Shipment Item Subtotal","Shipment Item Subtotal Tax","Shipment Status",'
+        '"Shipping Address","Shipping Charge","Shipping Option","Total Amount",'
+        '"Total Discounts","Unit Price","Unit Price Tax",Website'
+    )
+    data = (header + '\r\n112-1,addr,TBA1,USD,,,,,,2026-05-01,112-1,Closed,1,'
+            '"Visa - 9371",New,"Thing A",PO,2026-05-02,10.00,1.00,Shipped,addr,0.00,'
+            'Prime,11.00,0.00,10.00,0.00,amazon.com\n').encode("utf-8-sig")
+    assert detect_format(data)
+    charges = parse_order_history(data)
+    assert len(charges) == 1 and charges[0].amount == Decimal("10.00")
+
+
 def test_fixture_parses_to_charge_per_shipment_not_per_order():
     charges = parse_order_history(_fixture())
     assert len(charges) == 15
