@@ -19,7 +19,10 @@ from app.models.transaction import Transaction
 from app.models.workspace import Workspace, WorkspaceMember
 from app.services import invoice_service as svc
 
-TODAY = date(2026, 8, 26)
+TODAY = datetime.now(timezone.utc).date()  # same clock the service uses:
+                     # create_invoice defaults issue_date to UTC today and
+                     # rejects a due date before it — a hard-coded "today"
+                     # rots, and so does a local-time one after 19:00 UTC-5
 
 
 def build_invoice(**overrides) -> Invoice:
