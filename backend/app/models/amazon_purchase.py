@@ -46,8 +46,11 @@ class AmazonPurchase(Base):
     order_id: Mapped[str] = mapped_column(String(32))
     # Raw "Carrier Name & Tracking Number" value; "" when the export has none.
     # Part of the charge identity alongside order_id + ship_date, because one
-    # order can be charged as several shipments on the same day.
-    tracking: Mapped[str] = mapped_column(String(64), default="")
+    # order can be charged as several shipments on the same day. Kept whole:
+    # multi-parcel rows concatenate every parcel's number into one cell
+    # ("RABBIT(...) and RABBIT(...) and ..." — measured up to 160 chars), so
+    # this has to stay comfortably wider than a single tracking number.
+    tracking: Mapped[str] = mapped_column(String(255), default="")
     ship_date: Mapped[_date] = mapped_column(Date)
     order_date: Mapped[_date | None] = mapped_column(Date, nullable=True)
     # The shipment's Shipment Item Subtotal (or the summed per-row Total
