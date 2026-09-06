@@ -31,13 +31,18 @@ The export is **one row per shipment item**, not one row per order or per charge
   `Carrier Name & Tracking Number` (TBA…) values — each was a separate card
   charge. And 89 tracking strings are reused across *different* orders, so
   the grouping key must carry the order id too.
-- `Total Amount` is **per row (item)**, including item tax and any shipping charged.
-  The card charge for a shipment is the sum of `Total Amount` over the rows sharing
-  one tracking number. (`Shipment Item Subtotal` is repeated per shipment and would
-  double-count if summed.)
+- `Shipment Item Subtotal` is **per shipment**, repeated on every item row that
+  belongs to it (verified: all 296 multi-item shipment groups repeat one value).
+  It is the pre-tax subtotal — what the card statement actually shows.
+  `Total Amount` is per item and includes tax, so summing it overshoots the
+  charge by ~8 %. The parser therefore takes the subtotal **once per shipment
+  group** (summing it would double-count), falling back to summed Total
+  Amounts only when an export carries no subtotal.
 - `Payment Method Type` carries brand + card last-4: `Visa - 9371`, and split
   payments like `Gift Certificate/Card and Visa - 7944` (gift card covered part of
   the cost, so **the card charge is lower than the row total** — ~2% of rows here).
+  Not every last-4 is a credit card: `Visa - 7944`/`6357` are debit cards on a
+  checking account (619 rows, all 2021-23) — routing must know that (see Match).
 - `Ship Date`/`Order Date` arrive as ISO timestamps, sometimes with milliseconds
   (`2026-05-05T10:54:00.704Z`), sometimes as `Not Available`. Amazon charges when
   a shipment leaves the warehouse, so charge date ≈ ship date.
@@ -58,12 +63,14 @@ The export is **one row per shipment item**, not one row per order or per charge
 - grouping key = `(Order ID, tracking, ship-date)` — tracking is the shipment key;
   rows without tracking group by ship date instead (rare, documented risk of
   merging two same-day shipments of one order);
-- `amount` = sum of per-row `Total Amount` (2dp), `currency` from `Currency`;
+- `amount` = the shipment's `Shipment Item Subtotal`, taken **once** per
+  shipment group (2dp) — or summed `Total Amount`s when no subtotal exists;
+  `currency` from `Currency`;
 - `card_last4` / brand parsed from `Payment Method Type`; rows paying **only** with
   gift card (no trailing last-4) are dropped — they cannot match a card charge;
 - `is_split_payment` when the payment string contains `Gift Certificate/Card and` —
   the true card charge is smaller than `amount`, so these never auto-match;
-- `items` = de-duplicated product names (≤12, truncated) for enrichment.
+- `items` = every line item as `{name, amount}` (uncapped, per-row) for enrichment.
 
 ### Match (new `purchase_match_service.py`)
 
@@ -71,8 +78,13 @@ Modeled on `recurring_match_service` (one-to-one, exact-amount auto tier, soft
 tier reported only):
 
 - **Accounts**: explicit `account_id` param wins; otherwise every open
-  `credit_card` account in the workspace. When a charge carries a card last-4,
-  accounts whose `masked_number` matches are preferred (falls back to all).
+  `credit_card` account in the workspace. Each charge is then **routed by its
+  Payment-Method last-4** — to the account whose `masked_number` or trailing
+  `(9371)` name-tag carries that last-4. If no charge names a resolvable card,
+  every open card account is scanned (legacy behaviour); if some do, routing
+  is **strict**: a charge naming an unknown card — a debit card on a checking
+  account, say — gets no candidates rather than floating onto the nearest
+  credit account, where a same-amount twin could make it mispair.
 - **Candidates**: `debit` transactions, not ignored, dated within
   `[ship_date, ship_date + 5 days]`.
 - **Descriptor gate**: transaction description must contain `AMZN` or `AMAZON`
@@ -97,13 +109,20 @@ tier reported only):
 
 ## Calibration (against a real 2,132-row export)
 
-`backend/scripts/calibrate_amazon_match.py <export.csv>` rebuilds a "perfect
-statement" from the export (one synthetic debit per charge, posted ship+1;
-split payments seeded 20 % low) and runs the real matcher against it. On the
-2,132-row export: **1,536 charges parsed → 1,478 auto-linked (every non-split
-charge), 0 mispaired links, 58 report-only suggestions**, re-import fully
-skipped, whole match under 0.15 s. The 28 same-amount pairs whose windows
-overlap are paired correctly via ship-date order + earliest-posting pick.
+`backend/scripts/calibrate_amazon_match.py <export.csv>` seeds a "perfect
+statement" from the export (one synthetic debit per charge at the parsed
+subtotal, posted ship+1; split payments seeded 20 % low) and runs the real
+matcher against it. On the reference export: **1,536 charges parsed → 1,478
+auto-linked (every non-split charge), 0 mispaired links, 58 report-only
+suggestions**, re-import fully skipped, whole match under 0.15 s. The
+same-amount pairs whose windows overlap are paired correctly via ship-date
+order + earliest-posting pick.
+
+A `--statement <statement.csv>` mode instead replays a REAL statement dump —
+the true backtest, but only when the two files cover the same purchases. The
+reference pair did not (export shipped through May 13; statement began June
+2): zero pairs exist to find, which is a data gap, not a matcher failure —
+request a fresh Order History export to exercise it end to end.
 
 ### Enrich & persist (apply step)
 

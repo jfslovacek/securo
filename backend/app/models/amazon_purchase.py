@@ -50,16 +50,18 @@ class AmazonPurchase(Base):
     tracking: Mapped[str] = mapped_column(String(64), default="")
     ship_date: Mapped[_date] = mapped_column(Date)
     order_date: Mapped[_date | None] = mapped_column(Date, nullable=True)
-    # Sum of the per-row "Total Amount" over the shipment's items — what the
-    # card *should* show, before any gift-card split payment reduced it.
+    # The shipment's Shipment Item Subtotal (or the summed per-row Total
+    # Amounts when the export has no subtotal) — what the card *should* show,
+    # before any gift-card split payment reduced it.
     amount: Mapped[Decimal] = mapped_column(Numeric(precision=15, scale=2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     # True when payment was "Gift Certificate/Card and <card>": only part of
     # the charge went to the card, so exact-amount matching must not fire.
     is_split_payment: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    # Product names, de-duplicated and capped — the enrichment payload that
-    # rules (via notes) and agent context can use to classify a charge.
+    # Every line item of the shipment as {"name", "amount"} dicts — the
+    # enrichment payload that rules (via notes) and agent context can use to
+    # classify a charge by what was actually bought.
     items: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

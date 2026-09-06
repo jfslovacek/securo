@@ -1,20 +1,28 @@
 """Match Amazon Order History charges to the credit-card charges that paid them.
 
 A parsed charge (one shipment) is reconciled against existing debit
-transactions on credit-card accounts, mirroring `recurring_match_service`:
-matches are one-to-one and only the high-confidence (exact-amount) tier
-auto-links; softer matches are reported as suggestions, never persisted as
-links. Matching is scoped to debit transactions whose description still names
+transactions, mirroring `recurring_match_service`: matches are one-to-one and
+only the high-confidence (exact-amount) tier auto-links; softer matches are
+reported as suggestions, never persisted as links. The charge amount to
+reconcile against is the shipment's Shipment Item Subtotal — pre-tax, which
+is what statements actually show (summed Total Amounts overshoot it by the
+tax). Matching is scoped to debit transactions whose description still names
 Amazon (AMZN/AMAZON), so a coincidental $25.00 Uber Eats order never swallows
 an Amazon charge — and the enriched `notes` a successful match writes back
-("Amazon #<order>: <items>") is what lets rules and agent context classify the
-purchase by item, not just by merchant.
+("Amazon #<order>: <items with amounts>") is what lets rules and agent
+context classify the purchase by item, not just by merchant.
+
+Each charge also names the card that paid it ("Visa - 9371"). In auto mode
+that last-4 routes the charge to its account — by masked_number, or by a
+trailing "(9371)" tag in the account's name — and charges naming an unknown
+card are left unmatched rather than floated onto whichever card is nearby.
 
 An import is idempotent: charges already linked by an earlier import are
 skipped, and re-importing the same export never duplicates a purchase row or
 its enrichment text.
 """
 import logging
+import re
 import uuid
 from datetime import timedelta
 from decimal import Decimal
@@ -53,6 +61,24 @@ _NOTES_MAX_CHARS = 700
 def _has_amazon_descriptor(description: str | None) -> bool:
     upper = (description or "").upper()
     return any(token in upper for token in _DESCRIPTORS)
+
+
+# "Chase Sapphire Preferred (9371)" — imported and hand-named accounts often
+# carry the card's last-4 in a trailing parenthetical. Treating it as an
+# alias is what makes auto-routing work before anyone fills masked_number.
+_LAST4_IN_NAME_RE = re.compile(r"\((\d{4})\)\s*$")
+
+
+def _card_aliases(account: Account) -> set[str]:
+    """Last-4 digits this account is known by (masked_number, name tag)."""
+    aliases = set()
+    if account.masked_number and len(account.masked_number) == 4:
+        aliases.add(account.masked_number)
+    for text in (account.name, account.display_name):
+        match = _LAST4_IN_NAME_RE.search(text or "")
+        if match:
+            aliases.add(match.group(1))
+    return aliases
 
 
 def _purchase_fields(charge: AmazonCharge) -> dict:
@@ -112,6 +138,29 @@ async def match_purchases(
     if not accounts:
         raise ValueError("No open credit-card account to match against")
 
+    # ── Per-charge account routing (auto mode) ─────────────────────────────
+    # A charge names the card that paid for it ("Visa - 9371"). That last-4
+    # resolves to an account through masked_number or a trailing "(9371)" tag
+    # in the account name. If no named card resolves anywhere, fall back to
+    # scanning every open card account (the legacy behaviour); if some do,
+    # routing is strict — a charge naming an unknown card (a debit card on a
+    # checking account, say) is left unmatched rather than floated onto the
+    # nearest credit account, where a same-amount non-Amazon twin could make
+    # it mispair. Choosing one account in the UI skips routing entirely.
+    card_map: dict[str, set] = {}
+    for account in accounts:
+        for last4 in _card_aliases(account):
+            card_map.setdefault(last4, set()).add(account)
+    route = account_id is None
+    strict = route and any(c.card_last4 in card_map for c in charges if c.card_last4)
+
+    def scope_for(charge: AmazonCharge) -> list:
+        """Accounts this charge may link against, given its payment method."""
+        if not route or not charge.card_last4:
+            return accounts
+        scoped = [a for a in accounts if charge.card_last4 in _card_aliases(a)]
+        return scoped or ([] if strict else accounts)
+
     # ── Candidate transactions (one query, then bucketed in Python) ───────
     min_ship = min(c.ship_date for c in charges)
     max_ship = max(c.ship_date for c in charges)
@@ -164,11 +213,7 @@ async def match_purchases(
         the charge's own payment before a later twin's can be stolen.
         """
         dates = [charge.ship_date + timedelta(days=d) for d in range(MATCH_WINDOW_DAYS + 1)]
-        if charge.card_last4:
-            scoped = [a for a in accounts if a.masked_number == charge.card_last4] or accounts
-        else:
-            scoped = accounts
-        for account in scoped:
+        for account in scope_for(charge):
             for day in dates:
                 for txn in by_account_date.get((account.id, day), ()):
                     if txn.id in used_txn_ids:
@@ -196,8 +241,7 @@ async def match_purchases(
         # total (gift-card part unknown), so an exact-amount hit inside the
         # window is more likely another purchase's payment than this charge's.
         if not charge.is_split_payment:
-            for account in (accounts if not charge.card_last4 else
-                            [a for a in accounts if a.masked_number == charge.card_last4] or accounts):
+            for account in scope_for(charge):
                 for delta in (Decimal("0"), Decimal("0.01"), Decimal("-0.01")):
                     for txn in exact_buckets.get((account.id, charge.amount + delta), ()):
                         if txn.id in used_txn_ids:
@@ -272,7 +316,10 @@ async def match_purchases(
                 purchase.transaction_id = txn.id
                 # Enrich for rules (`notes` is a rule-matchable field) and
                 # agent context. merge_notes keeps this idempotent.
-                summary = "; ".join(charge.items)[:_NOTES_MAX_CHARS]
+                summary = "; ".join(
+                    f"{item['name']} ${item['amount']}" if item.get("amount") else item["name"]
+                    for item in charge.items
+                )[:_NOTES_MAX_CHARS]
                 note = f"Amazon #{charge.order_id}: {summary}" if summary \
                     else f"Amazon #{charge.order_id}"
                 txn.notes = merge_notes(txn.notes, note)
@@ -280,12 +327,9 @@ async def match_purchases(
                 # Record unmatched charges too: re-imports stay idempotent and
                 # the data stays queryable for later suggestion passes. The
                 # owning account is the one named by the export's card last-4
-                # (when known), else the first open card account.
-                owner = next(
-                    (a for a in accounts if charge.card_last4
-                     and a.masked_number == charge.card_last4),
-                    accounts[0],
-                )
+                # (when it resolves), else the first open card account — book-
+                # keeping only; which card actually paid lives in card_last4.
+                owner = (scope_for(charge) or accounts)[0]
                 session.add(AmazonPurchase(
                     workspace_id=workspace_id,
                     account_id=owner.id,

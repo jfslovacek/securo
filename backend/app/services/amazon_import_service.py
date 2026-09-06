@@ -2,15 +2,25 @@
 
 The export is one row per shipment item, not one row per order or per charge:
 a single order split across shipments appears as several rows with distinct
-tracking numbers, each of which was a separate credit-card charge. So the unit
-this parser produces is the *charge* — one shipment — summed from its item rows
-by ``Total Amount`` (which already folds in item tax and shipping).
+tracking numbers, each of which was a separate card charge. So the unit this
+parser produces is the *charge* — one shipment — and its matchable amount is
+the shipment's ``Shipment Item Subtotal``: the pre-tax subtotal of exactly
+that shipment, repeated on every item row belonging to it. (Verified on a
+real export: all 296 multi-item shipment groups repeat one subtotal value.)
+``Total Amount`` is per item and includes tax, so summing it overshoots the
+statement charge by the tax — which is why the subtotal, not the sum, is
+what actually appears on a card statement. When an export carries no
+subtotal column or value, we fall back to summing ``Total Amount``.
 
 Rows that pay without a card (gift-card-only, Amazon Rewards, blank payment
-method) cannot appear on a card statement, so they are dropped here rather than
-surfaced as unmatched noise. Split payments (gift card + card) are kept but
-flagged: the card was charged less than ``Total Amount``, so they can only ever
-be soft-suggested against a statement, never exact-amount matched.
+method) cannot appear on a card statement, so they are dropped here rather
+than surfaced as unmatched noise. Split payments (gift card + card) are kept
+but flagged: the card was charged less than the subtotal, so they can only
+ever be soft-suggested against a statement, never exact-amount matched.
+
+Item lines are kept whole — every row's product name with its own Total
+Amount — so enrichment and later tooling can see what was actually bought,
+not a truncated name list.
 
 Pure functions — no DB access — mirroring ``import_service.parse_*``.
 """
@@ -22,9 +32,11 @@ from decimal import Decimal
 
 from app.schemas.amazon import AmazonCharge
 
-# A charge must carry at least these to be matchable. "Total Amount" is what we
-# sum, "Payment Method Type" tells us which card (and whether it was a split),
-# and Ship Date anchors the statement-window search.
+# A charge must carry at least these to be matchable. "Shipment Item
+# Subtotal" is what the statement charged, "Payment Method Type" tells us
+# which card (and whether it was a split), and Ship Date anchors the
+# statement-window search. "Total Amount" stays required: it is the fallback
+# amount source and what item tracking is recorded against.
 REQUIRED_COLUMNS = (
     "order id",
     "total amount",
@@ -36,8 +48,6 @@ REQUIRED_COLUMNS = (
 # "Visa - 9371", "Gift Certificate/Card and Visa - 7944" — the trailing four
 # digits are the only stable link back to a card account.
 _CARD_LAST4_RE = re.compile(r"(\d{4})\s*$")
-
-_MAX_ITEMS_PER_CHARGE = 12
 
 
 def detect_format(content: bytes) -> bool:
@@ -60,6 +70,14 @@ def _parse_date(value: str):
         except ValueError:
             return None
     return None
+
+
+def _parse_money(value: str) -> Decimal | None:
+    try:
+        amount = Decimal((value or "").strip() or "0")
+    except Exception:
+        return None
+    return amount if amount > 0 else None
 
 
 def _parse_payment(pm: str) -> tuple[str | None, bool]:
@@ -99,7 +117,7 @@ def parse_order_history(content: bytes) -> list[AmazonCharge]:
     # never a wrong link). Dates arrive as full ISO timestamps or as
     # "Not Available"; both anchor on the ship date when parseable, else the
     # order date.
-    charges: dict[tuple, AmazonCharge] = {}
+    groups: dict[tuple, list[dict]] = {}
 
     for row in reader:
         row = {(k or "").lower().strip(): (v or "") for k, v in row.items()}
@@ -108,18 +126,15 @@ def parse_order_history(content: bytes) -> list[AmazonCharge]:
         if not order_id:
             continue
 
-        try:
-            total = Decimal(row.get("total amount", "").strip())
-        except Exception:
-            continue
-        if total <= 0:
+        total = _parse_money(row.get("total amount", ""))
+        if total is None:
             continue
 
         ship_date = _parse_date(row.get("ship date", "")) or _parse_date(row.get("order date", ""))
         if ship_date is None:
             continue
 
-        last4, is_split = _parse_payment(row.get("payment method type", ""))
+        last4, _ = _parse_payment(row.get("payment method type", ""))
         if last4 is None:
             # Paid without a card (gift card / rewards / blank) — it will never
             # appear on a card statement, so there is nothing to match against.
@@ -128,41 +143,59 @@ def parse_order_history(content: bytes) -> list[AmazonCharge]:
         tracking = row.get("carrier name & tracking number", "").strip()
         if tracking in ("Not Available", "Not Applicable"):
             tracking = ""
-        # "AMZN_US(TBA…63204) and AMZN_US(TBA…832804)" — one item split across
-        # two shipments (status "Shipped and Shipped"), which Amazon may have
-        # charged as one combined charge or two. Which one it was is unknowable
-        # from the export, so flag it like a split payment: report-only.
-        compound = " and " in tracking
 
-        key = (order_id, tracking, ship_date)
-        charge = charges.get(key)
-        if charge is None:
-            charge = AmazonCharge(
-                order_id=order_id,
-                tracking=tracking,
-                ship_date=ship_date,
-                order_date=_parse_date(row.get("order date", "")),
-                amount=Decimal("0"),
-                currency=(row.get("currency", "").strip().upper() or "USD"),
-                card_last4=last4,
-                is_split_payment=is_split or compound,
-                items=[],
-            )
-            charges[key] = charge
-        else:
-            # A shipment paid by two cards is rare; if it happens, refuse to
-            # exact-match it rather than guess which card carried the balance.
-            if charge.card_last4 != last4:
-                charge.is_split_payment = True
-            if is_split:
-                charge.is_split_payment = True
+        groups.setdefault((order_id, tracking, ship_date), []).append(row)
 
-        charge.amount += total
-        name = row.get("product name", "").strip()
-        if name and name not in charge.items and len(charge.items) < _MAX_ITEMS_PER_CHARGE:
-            charge.items.append(name)
+    charges: list[AmazonCharge] = []
+    for (order_id, tracking, ship_date), rows in groups.items():
+        first = rows[0]
+        last4, is_split = _parse_payment(first.get("payment method type", ""))
 
-    for charge in charges.values():
-        charge.amount = charge.amount.quantize(Decimal("0.01"))
+        # "Shipped and Shipped" rows name two tracking numbers: the item
+        # crossed two parcels, so the row total may not equal any single card
+        # charge — report-only, like a split payment.
+        if " and " in tracking:
+            is_split = True
 
-    return list(charges.values())
+        # Amount source, in order of trust:
+        # 1. the shipment's Shipment Item Subtotal (repeated on every item
+        #    row of the shipment — take it once, summing would double-count);
+        # 2. the summed per-item Total Amounts (exports without the subtotal
+        #    column, or digital rows that carry none).
+        subtotal = None
+        total_sum = Decimal("0")
+        for row in rows:
+            if subtotal is None:
+                subtotal = _parse_money(row.get("shipment item subtotal", ""))
+            total_sum += Decimal((row.get("total amount") or "0").strip() or "0")
+        amount = (subtotal if subtotal is not None else total_sum).quantize(Decimal("0.01"))
+
+        # A shipment paid by two cards is rare; if it happens, refuse to
+        # exact-match it rather than guess which card carried the balance.
+        for row in rows[1:]:
+            row_last4, row_split = _parse_payment(row.get("payment method type", ""))
+            if row_last4 != last4 or row_split:
+                is_split = True
+
+        # Every line item, with its own Total Amount — kept whole and in
+        # order for enrichment and tracking (no capping, no collapsing).
+        items: list[dict] = []
+        for row in rows:
+            name = row.get("product name", "").strip()
+            if not name:
+                continue
+            items.append({"name": name, "amount": (row.get("total amount") or "").strip()})
+
+        charges.append(AmazonCharge(
+            order_id=order_id,
+            tracking=tracking,
+            ship_date=ship_date,
+            order_date=_parse_date(first.get("order date", "")),
+            amount=amount,
+            currency=(first.get("currency", "").strip().upper() or "USD"),
+            card_last4=last4,
+            is_split_payment=is_split,
+            items=items,
+        ))
+
+    return charges

@@ -18,11 +18,12 @@ class AmazonCharge(BaseModel):
     tracking: str = ""  # raw Carrier Name & Tracking Number; "" when absent
     ship_date: date
     order_date: Optional[date] = None
-    amount: Decimal  # sum of per-row "Total Amount"; pre-gift-card-split
+    amount: Decimal  # shipment's Shipment Item Subtotal (or summed Total
+                    # Amounts when absent); pre-gift-card-split
     currency: str = "USD"
     card_last4: Optional[str] = None
     is_split_payment: bool = False  # gift card covered part of the charge
-    items: list[str] = []  # de-duplicated product names (capped)
+    items: list[dict] = []  # every line item as {"name", "amount"}
 
 
 class AmazonMatchEntry(BaseModel):

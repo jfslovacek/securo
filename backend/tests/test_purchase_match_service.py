@@ -2,7 +2,7 @@
 
 The fixture file drives the parser tests; here charges are hand-built so each
 test isolates one matcher rule: window, descriptor gate, amount tiers,
-one-to-one linking, and idempotent re-imports.
+per-charge card routing, one-to-one linking, and idempotent re-imports.
 """
 import uuid
 from datetime import date
@@ -28,7 +28,7 @@ def _charge(amount, ship_day, *, order_id="111-0000000-0000000", tracking="TBA12
         amount=Decimal(amount),
         card_last4=last4,
         is_split_payment=split,
-        items=["Widget A", "Widget B"],
+        items=[{"name": "Widget A", "amount": "12.00"}, {"name": "Widget B", "amount": "7.50"}],
     )
 
 
@@ -182,6 +182,48 @@ async def test_last4_routes_to_the_matching_card_account(session, test_user, tes
 
     assert report.auto_matched == 1
     assert report.matches[0].transaction_id == txn.id
+
+
+@pytest.mark.asyncio
+async def test_unknown_card_charge_is_not_floated_to_named_accounts(session, test_user, test_workspace):
+    """Routing is per Payment Method Type. Once any charge names a card that
+    resolves to an account (masked_number or a "(9371)" tag in the name),
+    charges naming an UNKNOWN card get no candidates at all — a debit-card
+    purchase must not link to a credit-account debit that merely shares its
+    amount and window."""
+    chase = await _card(
+        session, test_user, test_workspace,
+        masked=None, name="Chase Sapphire Preferred (9371)",
+    )
+    txn = await _txn(session, test_user, test_workspace, chase, "AMZN Mktp US", "28.40", 9)
+
+    charges = [
+        _charge("28.40", 8, order_id="111-1", tracking="TBA1", last4="7944"),
+        _charge("28.40", 8, order_id="111-2", tracking="TBA2", last4="9371"),
+    ]
+    report = await purchase_match_service.match_purchases(
+        session, test_workspace.id, charges, apply=True,
+    )
+
+    assert report.auto_matched == 1 and report.unmatched == 1
+    assert report.matches[0].order_id == "111-2"  # the charge naming Chase took it
+    by_order = {p.order_id: p for p in (await session.execute(select(AmazonPurchase))).scalars()}
+    assert by_order["111-1"].transaction_id is None  # debit card: unmatched, not mispaired
+    assert by_order["111-2"].transaction_id == txn.id
+
+
+@pytest.mark.asyncio
+async def test_unnamed_accounts_keep_the_legacy_all_account_scan(session, test_user, test_workspace):
+    # No account names any card (masked_number empty, no "(9371)" tag):
+    # routing degrades to the old scan-every-card-account behaviour rather
+    # than matching nothing.
+    acct = await _card(session, test_user, test_workspace, masked=None, name="Chase Freedom")
+    txn = await _txn(session, test_user, test_workspace, acct, "AMZN Mktp US", "28.40", 9)
+
+    report = await purchase_match_service.match_purchases(
+        session, test_workspace.id, [_charge("28.40", 8, last4="7944")], apply=False,
+    )
+    assert report.auto_matched == 1  # last-4 unknown, but nothing named either
 
 
 @pytest.mark.asyncio
