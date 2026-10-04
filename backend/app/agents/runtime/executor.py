@@ -431,9 +431,16 @@ class AgentExecutor:
             yield ExecutorEvent(type="done", finish_reason="error")
             return
 
-        # 4. Tool-calling loop. Cap iterations to prevent runaway agents.
+        # 4. Bound tool rounds, then reserve one tool-free summary round.
         MAX_ITERS = 6
-        for iteration in range(MAX_ITERS):
+        for iteration in range(MAX_ITERS + 1):
+            final_answer = iteration == MAX_ITERS
+            if final_answer:
+                messages.append(ChatMessage(role="system", content=(
+                    "The tool budget for this request is exhausted. Give your final answer "
+                    "in the user's language using the results already collected. "
+                    "Do not request more tools. State any missing evidence or limitations."
+                )))
             text_buf: list[str] = []
             open_calls: dict[str, dict] = {}
             finish_reason = "stop"
@@ -444,7 +451,7 @@ class AgentExecutor:
                 async for chunk in provider.chat_stream(
                     messages,
                     model=model,
-                    tools=tool_defs or None,
+                    tools=None if final_answer else (tool_defs or None),
                     temperature=agent.temperature,
                 ):
                     async for ev in _process_chunk(chunk, text_buf, open_calls):
@@ -478,6 +485,11 @@ class AgentExecutor:
                 except json.JSONDecodeError:
                     args = {"_raw": tc["args_buf"]}
                 assembled_calls.append(ToolCall(id=tc["id"], name=tc["name"], arguments=args))
+
+            # A provider that ignores the final-answer instruction must not
+            # dispatch more tools or persist calls without corresponding results.
+            if final_answer and assembled_calls:
+                break
 
             # Persist assistant turn.
             assistant_msg = await conversation_service.append_message(

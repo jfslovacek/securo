@@ -508,10 +508,11 @@ async def test_max_iterations_terminates_runaway_agent(session, test_user, test_
 
     # Same tool-call turn repeated indefinitely.
     def _looping_turn():
+        call_id = f"t{uuid.uuid4().hex[:6]}"
         return [
-            ChatChunk(type="tool_call_start", tool_call_id=f"t{uuid.uuid4().hex[:6]}", tool_name="securo__loop_tool"),
-            ChatChunk(type="tool_call_args_delta", tool_call_id="t1", args_delta="{}"),
-            ChatChunk(type="tool_call_end", tool_call_id="t1"),
+            ChatChunk(type="tool_call_start", tool_call_id=call_id, tool_name="securo__loop_tool"),
+            ChatChunk(type="tool_call_args_delta", tool_call_id=call_id, args_delta="{}"),
+            ChatChunk(type="tool_call_end", tool_call_id=call_id),
             ChatChunk(type="finish", finish_reason="tool_calls"),
         ]
 
@@ -529,5 +530,59 @@ async def test_max_iterations_terminates_runaway_agent(session, test_user, test_
 
     err = next((e for e in events if e.type == "error"), None)
     done = next((e for e in events if e.type == "done"), None)
+    assert len(fake_mcp.calls) == 6
+    stored = (await session.execute(
+        select(Message).where(Message.conversation_id == test_conversation.id, Message.role == "assistant")
+    )).scalars().all()
+    assert sum(bool(m.tool_calls) for m in stored) == 6
     assert err is not None and err.error_code == "max_iterations"
     assert done is not None and done.finish_reason == "max_iterations"
+
+
+async def test_tool_budget_reserves_final_answer_round(
+    session, test_user, test_agent, test_conversation
+):
+    """Results from the last allowed tool round still reach a final answer."""
+    tools = [ToolHandle(server="securo", name="list_accounts", description="", parameters={"type": "object"})]
+    fake_mcp = _FakeMCP(tools=tools)
+    offered_tools = []
+    final_messages = []
+
+    class _Capture(_ScriptedProvider):
+        async def chat_stream(self, messages, *, model, tools=None, temperature=0.4, max_tokens=None):
+            offered_tools.append(tools)
+            final_messages[:] = list(messages)
+            async for chunk in super().chat_stream(messages, model=model, tools=tools, temperature=temperature, max_tokens=max_tokens):
+                yield chunk
+
+    turns = []
+    for i in range(6):
+        call_id = f"call-{i}"
+        turns.append([
+            ChatChunk(type="tool_call_start", tool_call_id=call_id, tool_name="securo__list_accounts"),
+            ChatChunk(type="tool_call_args_delta", tool_call_id=call_id, args_delta="{}"),
+            ChatChunk(type="tool_call_end", tool_call_id=call_id),
+            ChatChunk(type="finish", finish_reason="tool_calls"),
+        ])
+    turns.append([
+        ChatChunk(type="text_delta", text="September spending decreased by 10%."),
+        ChatChunk(type="finish", finish_reason="stop"),
+    ])
+    with _patch_provider(_Capture(turns)):
+        events = await _drain(
+            AgentExecutor(mcp=fake_mcp), session=session, agent=test_agent,
+            user_id=test_user.id, conversation_id=test_conversation.id,
+            user_message="Summarize last month's spending.",
+        )
+
+    assert len(fake_mcp.calls) == 6
+    assert len(offered_tools) == 7
+    assert offered_tools[-1] is None
+    assert len([m for m in final_messages if m.role == "tool"]) == 6
+    assert any(e.text == "September spending decreased by 10%." for e in events)
+    assert not any(e.type == "error" for e in events)
+    assert events[-1].finish_reason == "stop"
+    stored = (await session.execute(
+        select(Message).where(Message.conversation_id == test_conversation.id, Message.role == "assistant")
+    )).scalars().all()
+    assert any(m.content == "September spending decreased by 10%." for m in stored)
