@@ -41,6 +41,32 @@ Open [http://localhost:3000](http://localhost:3000) and create an account. That'
   <img src="docs/screenshot.png" width="800" alt="Securo dashboard" />
 </p>
 
+## Running changes from this fork
+
+The production Compose file normally uses upstream prebuilt images. To run
+backend and frontend changes from this checkout, enable agents in your `.env`
+and build with the local override:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.local.yml --profile agents up -d --build
+```
+
+Use both Compose files for subsequent updates. This keeps the production database
+and storage volumes while building the application from this checkout.
+
+The production frontend mounts `frontend/default.conf.template` as the input to
+Nginx's startup script. Keep `proxy_read_timeout 300s;` inside `location /api/`.
+Do not mount a read-only file at `/etc/nginx/conf.d/default.conf`: startup needs to
+write that generated output. After changing the template, recreate the frontend.
+Verify the active timeout with:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.local.yml exec frontend nginx -T 2>&1 | grep proxy_read_timeout
+```
+
+Agent queries can use six tool rounds, followed by one tool-free response to
+summarize the collected results and explain any remaining gaps.
+
 ## Features
 
 - Multi-account management with running balances

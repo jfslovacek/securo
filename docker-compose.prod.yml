@@ -119,6 +119,9 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
 
   frontend:
+    # Mount the input template; startup must be able to write conf.d/default.conf.
+    volumes:
+      - ./frontend/default.conf.template:/etc/nginx/templates/default.conf.template:ro
     image: ghcr.io/securo-finance/securo-frontend:latest
     ports:
       - "${FRONTEND_PORT:-3000}:8080"
