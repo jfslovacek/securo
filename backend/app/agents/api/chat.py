@@ -7,10 +7,12 @@ with summaries when results land.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+from contextlib import suppress
 from dataclasses import asdict
-from typing import AsyncIterator
+from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,33 @@ from app.core.database import get_async_session
 from app.core.workspace_context import WorkspaceContext, current_writable_workspace
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
+
+HEARTBEAT_INTERVAL_SECONDS = 15.0
+
+
+async def _with_heartbeats(stream: AsyncGenerator[bytes, None]) -> AsyncGenerator[bytes, None]:
+    """Keep quiet streams alive without cancelling the in-flight agent step."""
+    pending: asyncio.Task[bytes] | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(anext(stream))
+            done, _ = await asyncio.wait({pending}, timeout=HEARTBEAT_INTERVAL_SECONDS)
+            if not done:
+                yield b": keep-alive\n\n"
+                continue
+            try:
+                chunk = pending.result()
+            except StopAsyncIteration:
+                return
+            pending = None
+            yield chunk
+    finally:
+        if pending is not None:
+            pending.cancel()
+            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                await pending
+        await stream.aclose()
 
 
 def _format_event(event: ExecutorEvent) -> bytes:
@@ -68,7 +97,7 @@ async def chat(
 
     executor = AgentExecutor()
 
-    async def gen() -> AsyncIterator[bytes]:
+    async def gen() -> AsyncGenerator[bytes, None]:
         # Send the conversation id immediately so the client can update its URL.
         yield f"event: conversation\ndata: {json.dumps({'conversation_id': str(conv.id)})}\n\n".encode()
         try:
@@ -86,7 +115,7 @@ async def chat(
         except Exception as exc:  # noqa: BLE001
             yield f"event: error\ndata: {json.dumps({'error_code': 'unknown', 'error_message': str(exc)})}\n\n".encode()
 
-    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+    return StreamingResponse(_with_heartbeats(gen()), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
         "Connection": "keep-alive",
